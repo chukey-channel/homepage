@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>タイムカード｜chukey</title>
+<meta name="robots" content="noindex">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; background: #faf6ef; color: #333; line-height: 1.6; padding-bottom: 40px; }
+  header { background: linear-gradient(135deg, #b33a2b, #d97b2f); color: #fff; padding: 18px 20px; text-align: center; }
+  header h1 { font-size: 22px; }
+  header p { font-size: 13px; opacity: 0.9; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px 14px; }
+  .today { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 18px; text-align: center; margin-bottom: 18px; }
+  .today .date { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+  .today .now { color: #999; font-size: 14px; margin-bottom: 14px; }
+  .stamps { display: flex; gap: 12px; justify-content: center; margin-bottom: 14px; }
+  .stamp { flex: 1; border: 2px solid #eee; border-radius: 10px; padding: 8px 4px; }
+  .stamp .label { font-size: 12px; color: #999; }
+  .stamp .time { font-size: 24px; font-weight: bold; }
+  .btns { display: flex; gap: 12px; }
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 12px; }
+  .big { flex: 1; font-size: 20px; font-weight: bold; padding: 16px 0; color: #fff; }
+  .in { background: #2e7d32; }
+  .out { background: #b33a2b; }
+  .big:active { opacity: 0.75; }
+  .big:disabled { background: #bbb; }
+  .brk { margin-top: 14px; font-size: 14px; }
+  .brk input { width: 64px; font-size: 16px; padding: 6px; border: 1px solid #ccc; border-radius: 8px; text-align: center; }
+  .worked { margin-top: 8px; font-size: 15px; font-weight: bold; color: #b33a2b; }
+  .monthnav { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 10px; }
+  .monthnav button { background: #fff; border: 1px solid #ddd; font-size: 18px; padding: 6px 16px; border-radius: 10px; }
+  .monthnav .m { font-size: 17px; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-size: 14px; }
+  th { background: #1f3864; color: #fff; padding: 8px 4px; font-size: 12px; }
+  td { padding: 7px 4px; text-align: center; border-bottom: 1px solid #f0e9dd; }
+  tr.sun td { color: #c00000; }
+  tr.sat td { color: #2e5aac; }
+  tr.today-row td { background: #fce4d6; font-weight: bold; }
+  tr.future td { color: #bbb; }
+  td.edit { color: #d97b2f; font-weight: bold; cursor: pointer; }
+  .totals { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 14px 18px; margin-top: 14px; font-size: 15px; }
+  .totals b { color: #b33a2b; font-size: 18px; }
+  .tools { margin-top: 16px; text-align: center; }
+  .tools button { background: #fff; border: 1px solid #d97b2f; color: #b33a2b; font-size: 14px; font-weight: bold; padding: 10px 18px; }
+  .note { color: #999; font-size: 12px; margin-top: 14px; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⏰ タイムカード</h1>
+  <p>データはこのスマホの中だけに保存されます</p>
+</header>
+
+<main>
+  <div class="today">
+    <div class="date" id="todayDate"></div>
+    <div class="now" id="nowTime"></div>
+    <div class="stamps">
+      <div class="stamp"><div class="label">出勤</div><div class="time" id="stampIn">--:--</div></div>
+      <div class="stamp"><div class="label">退勤</div><div class="time" id="stampOut">--:--</div></div>
+    </div>
+    <div class="btns">
+      <button class="big in" id="btnIn">出勤する</button>
+      <button class="big out" id="btnOut">退勤する</button>
+    </div>
+    <div class="brk">休憩 <input type="number" id="brkInput" min="0" step="5" inputmode="numeric"> 分</div>
+    <div class="worked" id="todayWorked"></div>
+  </div>
+
+  <div class="monthnav">
+    <button id="prevM">◀</button>
+    <div class="m" id="monthLabel"></div>
+    <button id="nextM">▶</button>
+  </div>
+
+  <table>
+    <thead><tr><th>日</th><th>曜</th><th>出勤</th><th>退勤</th><th>休憩</th><th>実働</th><th></th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="totals" id="totals"></div>
+
+  <div class="tools">
+    <button id="csvBtn">この月をCSVで保存</button>
+    <button id="resetBtn" style="border-color:#bbb;color:#888;margin-left:8px;">データを全部消す</button>
+  </div>
+
+  <p class="note">行の「直す」から、時刻の手直しができます。<br>大事な記録は、たまにCSVで保存しておくと安心です。</p>
+</main>
+
+<script>
+const KEY = "chukey-timecard-v1";
+let data = {};
+try { data = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { data = {}; }
+
+const WD = ["日", "月", "火", "水", "木", "金", "土"];
+const pad = n => String(n).padStart(2, "0");
+const keyOf = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const todayKey = keyOf(new Date());
+let viewY = new Date().getFullYear(), viewM = new Date().getMonth();
+
+function save() { localStorage.setItem(KEY, JSON.stringify(data)); }
+function nowHM() { const n = new Date(); return pad(n.getHours()) + ":" + pad(n.getMinutes()); }
+function toMin(t) { if (!t) return null; const p = t.split(":"); return (+p[0]) * 60 + (+p[1]); }
+function worked(rec) {
+  if (!rec || rec.in == null || rec.out == null) return null;
+  let m = rec.out - rec.in - (rec.brk || 0);
+  return m < 0 ? null : m;
+}
+function fmt(m) { if (m == null) return ""; return Math.floor(m / 60) + ":" + pad(m % 60); }
+function getRec(k) {
+  const r = data[k];
+  if (!r) return null;
+  return { in: toMin(r.in), out: toMin(r.out), brk: r.brk || 0, inS: r.in || "", outS: r.out || "" };
+}
+
+function renderToday() {
+  const n = new Date();
+  document.getElementById("todayDate").textContent =
+    n.getFullYear() + "年" + (n.getMonth() + 1) + "月" + n.getDate() + "日（" + WD[n.getDay()] + "）";
+  document.getElementById("nowTime").textContent = "現在 " + nowHM();
+  const rec = getRec(todayKey);
+  document.getElementById("stampIn").textContent = rec && rec.inS ? rec.inS : "--:--";
+  document.getElementById("stampOut").textContent = rec && rec.outS ? rec.outS : "--:--";
+  document.getElementById("btnIn").disabled = !!(rec && rec.inS);
+  document.getElementById("btnOut").disabled = !(rec && rec.inS) || !!(rec && rec.outS);
+  document.getElementById("brkInput").value = data[todayKey] && data[todayKey].brk != null ? data[todayKey].brk : 60;
+  const w = worked(rec);
+  document.getElementById("todayWorked").textContent = w != null ? "今日の実働：" + fmt(w) : "";
+}
+
+function renderMonth() {
+  document.getElementById("monthLabel").textContent = viewY + "年" + (viewM + 1) + "月";
+  const last = new Date(viewY, viewM + 1, 0).getDate();
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = "";
+  let total = 0, days = 0;
+  for (let d = 1; d <= last; d++) {
+    const dt = new Date(viewY, viewM, d);
+    const k = keyOf(dt);
+    const rec = getRec(k);
+    const w = worked(rec);
+    if (w != null) { total += w; days++; }
+    const tr = document.createElement("tr");
+    if (dt.getDay() === 0) tr.className = "sun";
+    if (dt.getDay() === 6) tr.className = "sat";
+    if (k === todayKey) tr.className = "today-row";
+    if (k > todayKey) tr.classList.add("future");
+    tr.innerHTML = "<td>" + d + "</td><td>" + WD[dt.getDay()] + "</td><td>" +
+      (rec ? rec.inS : "") + "</td><td>" + (rec ? rec.outS : "") + "</td><td>" +
+      (rec ? rec.brk : "") + "</td><td>" + fmt(w) + "</td>";
+    const td = document.createElement("td");
+    td.className = "edit"; td.textContent = "直す";
+    td.onclick = () => editDay(k, d);
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  }
+  document.getElementById("totals").innerHTML =
+    "出勤日数：<b>" + days + " 日</b>　合計実働：<b>" + fmt(total) + "</b>";
+}
+
+function stamp(kind) {
+  const r = data[todayKey] || { brk: 60 };
+  r[kind] = nowHM();
+  if (r.brk == null) r.brk = 60;
+  data[todayKey] = r;
+  save(); document.getElementById("resetBtn").onclick = () => {
+  if (!confirm("このスマホに保存された打刻データを、全部消しますか？")) return;
+  if (!confirm("本当に消しますか？ 元に戻せません")) return;
+  localStorage.removeItem(KEY);
+  data = {};
+  save(); renderToday(); renderMonth();
+  alert("白紙に戻しました");
+};
+
+renderToday(); renderMonth();
+}
+
+function editDay(k, d) {
+  const r = data[k] || {};
+  const ni = prompt(viewM + 1 + "月" + d + "日の出勤時刻（例 9:00、消すときは空欄）", r.in || "");
+  if (ni === null) return;
+  const no = prompt(viewM + 1 + "月" + d + "日の退勤時刻（例 18:00、消すときは空欄）", r.out || "");
+  if (no === null) return;
+  const nb = prompt("休憩（分）", r.brk != null ? r.brk : 60);
+  if (nb === null) return;
+  const ok = t => t === "" || /^([01]?\d|2[0-3]):[0-5]\d$/.test(t);
+  if (!ok(ni) || !ok(no)) { alert("時刻は 9:00 のような形で入れてください"); return; }
+  const nr = {};
+  if (ni) nr.in = ni; if (no) nr.out = no;
+  nr.brk = parseInt(nb, 10) || 0;
+  if (ni || no) data[k] = nr; else delete data[k];
+  save(); renderToday(); renderMonth();
+}
+
+document.getElementById("btnIn").onclick = () => stamp("in");
+document.getElementById("btnOut").onclick = () => stamp("out");
+document.getElementById("brkInput").onchange = e => {
+  const r = data[todayKey] || {};
+  r.brk = parseInt(e.target.value, 10) || 0;
+  data[todayKey] = r;
+  save(); renderMonth();
+};
+document.getElementById("prevM").onclick = () => { viewM--; if (viewM < 0) { viewM = 11; viewY--; } renderMonth(); };
+document.getElementById("nextM").onclick = () => { viewM++; if (viewM > 11) { viewM = 0; viewY++; } renderMonth(); };
+document.getElementById("csvBtn").onclick = () => {
+  const last = new Date(viewY, viewM + 1, 0).getDate();
+  let csv = "日付,曜日,出勤,退勤,休憩(分),実働\n";
+  for (let d = 1; d <= last; d++) {
+    const dt = new Date(viewY, viewM, d);
+    const rec = getRec(keyOf(dt));
+    csv += keyOf(dt) + "," + WD[dt.getDay()] + "," + (rec ? rec.inS : "") + "," +
+      (rec ? rec.outS : "") + "," + (rec ? rec.brk : "") + "," + fmt(worked(rec)) + "\n";
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" }));
+  a.download = "timecard-" + viewY + pad(viewM + 1) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+renderToday(); renderMonth();
+setInterval(renderToday, 30000);
+</script>
+
+</body>
+</html>
